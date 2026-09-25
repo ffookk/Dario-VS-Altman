@@ -1,0 +1,40 @@
+name: Validate video asset
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the video
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install the media decoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+      - name: Validate the documented video link
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          root = Path.cwd()
+          video = root / 'Dario-VS-Altman.mp4'
+          links = re.findall(r'\[[^\]]+\]\(([^)]+)\)', (root / 'README.md').read_text(encoding='utf-8'))
+          assert any((root / link).resolve() == video for link in links), 'README must link to the video'
+          assert video.is_file() and video.stat().st_size > 0, 'Video is missing or empty'
+          PY
+      - name: Decode the full video and any audio; reject corrupt media
+        run: >-
+          ffmpeg -hide_banner -v error -xerror -err_detect explode
+          -i Dario-VS-Altman.mp4 -map 0:v:0 -map '0:a?' -f null -
